@@ -32,7 +32,7 @@
 1. リポジトリをクローン
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/wabisukecx/Loop-Profiler.git
 cd loop-profiler
 ```
 
@@ -85,6 +85,7 @@ loop-profiler/
 ```
 
 ## UI説明
+<img width="752" height="932" alt="image" src="https://github.com/user-attachments/assets/24ccbef9-c491-44c0-a386-fd77b1f8c1ce" />
 
 ### 波形表示
 
@@ -160,3 +161,4 @@ loop-profiler/
 - エクスポート機能（イントロ・ループ・アウトロの組み合わせ）
 - キャッシュ機能
 - 詳細情報表示（開始時刻、終了時刻、ループ長）
+
