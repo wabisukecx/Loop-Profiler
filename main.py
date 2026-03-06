@@ -223,7 +223,7 @@ class IntegratedLoopProfiler(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Loop Profiler v2.0 - Powered by Pymusiclooper & BASS & AI")
-        self.resize(750, 900)
+        self.resize(950, 900)
         self.apply_styles()
         
         self.script_dir = os.path.dirname(os.path.abspath(__file__))
