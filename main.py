@@ -294,6 +294,7 @@ class IntegratedLoopProfiler(QWidget):
 
         self.list = QListWidget()
         self.list.itemDoubleClicked.connect(self.on_candidate_selected)
+        self.list.currentRowChanged.connect(self.on_row_changed)
         layout.addWidget(self.list)
 
         # 編集パネルの追加
@@ -580,9 +581,14 @@ class IntegratedLoopProfiler(QWidget):
         self.handle = self.bass.BASS_StreamCreateFile(False, ctypes.c_wchar_p(self.audio_path), 0, 0, flags)
         if self.handle:
             # 曲の長さをキャッシュ
+            # OGGは mutagen で取得（ffprobe不要）、それ以外は pydub
             try:
-                audio = AudioSegment.from_file(self.audio_path)
-                self.audio_duration_ms = len(audio)
+                if self.audio_path.lower().endswith(".ogg") and MUTAGEN_AVAILABLE:
+                    _ogg_info = OggVorbis(self.audio_path)
+                    self.audio_duration_ms = int(_ogg_info.info.length * 1000)
+                else:
+                    audio = AudioSegment.from_file(self.audio_path)
+                    self.audio_duration_ms = len(audio)
             except:
                 self.audio_duration_ms = 0
             
@@ -789,6 +795,13 @@ class IntegratedLoopProfiler(QWidget):
         item.setFont(QFont("Consolas", 9))
         item.setForeground(color)
         return item
+
+    def on_row_changed(self, row):
+        """リストで候補をシングルクリック選択したときにOGGボタンを有効化"""
+        if row < 0 or not self.candidates:
+            return
+        if self.audio_path and self.audio_path.lower().endswith(".ogg") and MUTAGEN_AVAILABLE:
+            self.btn_export_ogg.setEnabled(True)
 
     def on_candidate_selected(self, item):
         row = self.list.currentRow()
