@@ -3,6 +3,13 @@ import sys
 import ctypes
 import subprocess
 import glob
+import shutil
+
+try:
+    from mutagen.oggvorbis import OggVorbis
+    MUTAGEN_AVAILABLE = True
+except ImportError:
+    MUTAGEN_AVAILABLE = False
 from PyQt6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout,
     QPushButton, QListWidget, QFileDialog,
@@ -216,7 +223,7 @@ class IntegratedLoopProfiler(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Loop Profiler v2.0 - Powered by Pymusiclooper & BASS & AI")
-        self.resize(750, 900)
+        self.resize(950, 900)
         self.apply_styles()
         
         self.script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -287,6 +294,7 @@ class IntegratedLoopProfiler(QWidget):
 
         self.list = QListWidget()
         self.list.itemDoubleClicked.connect(self.on_candidate_selected)
+        self.list.currentRowChanged.connect(self.on_row_changed)
         layout.addWidget(self.list)
 
         # 編集パネルの追加
@@ -373,6 +381,13 @@ class IntegratedLoopProfiler(QWidget):
         self.btn_export.clicked.connect(self.export_audio)
         self.btn_export.setEnabled(False)
         layout.addWidget(self.btn_export)
+
+        # OGGエクスポートボタン（入力がOGGのときのみ有効）
+        self.btn_export_ogg = QPushButton("EXPORT TO OGG  (with LOOPSTART / LOOPLENGTH tags)")
+        self.btn_export_ogg.setObjectName("exportOggBtn")
+        self.btn_export_ogg.clicked.connect(self.export_ogg_with_tags)
+        self.btn_export_ogg.setEnabled(False)
+        layout.addWidget(self.btn_export_ogg)
         
         # チェックボックスの変更を監視
         self.check_intro.stateChanged.connect(self.update_preview_info)
@@ -442,6 +457,15 @@ class IntegratedLoopProfiler(QWidget):
             }
             QPushButton#exportBtn:hover { 
                 background-color: #244a24; 
+            }
+            QPushButton#exportOggBtn { 
+                background-color: #2a2010; 
+                color: #ff9900; 
+                border: 1px solid #ff9900; 
+                font-size: 12px;
+            }
+            QPushButton#exportOggBtn:hover { 
+                background-color: #3a2a10; 
             }
             QListWidget { background-color: #080808; border: 1px solid #222; border-radius: 4px; outline: none; }
             QListWidget::item { background-color: #151515; margin: 4px; padding: 14px; border-radius: 4px; border-left: 5px solid #222; }
@@ -542,6 +566,13 @@ class IntegratedLoopProfiler(QWidget):
             self.label.setText(os.path.basename(path).upper())
             self.btn_analyze.setEnabled(True)
             self.status_label.setText("FILE READY")
+            # OGGエクスポートボタンはOGG入力のときのみ有効化
+            is_ogg = path.lower().endswith(".ogg")
+            self.btn_export_ogg.setEnabled(False)  # 候補選択後に有効化するためリセット
+            self.btn_export_ogg.setToolTip(
+                "OGGファイルを選択したときのみ使用できます" if not is_ogg else
+                "元のOGGファイルにLOOPSTART/LOOPLENGTHタグを付与して保存します"
+            )
             self.load_audio_stream()
 
     def load_audio_stream(self):
@@ -550,9 +581,14 @@ class IntegratedLoopProfiler(QWidget):
         self.handle = self.bass.BASS_StreamCreateFile(False, ctypes.c_wchar_p(self.audio_path), 0, 0, flags)
         if self.handle:
             # 曲の長さをキャッシュ
+            # OGGは mutagen で取得（ffprobe不要）、それ以外は pydub
             try:
-                audio = AudioSegment.from_file(self.audio_path)
-                self.audio_duration_ms = len(audio)
+                if self.audio_path.lower().endswith(".ogg") and MUTAGEN_AVAILABLE:
+                    _ogg_info = OggVorbis(self.audio_path)
+                    self.audio_duration_ms = int(_ogg_info.info.length * 1000)
+                else:
+                    audio = AudioSegment.from_file(self.audio_path)
+                    self.audio_duration_ms = len(audio)
             except:
                 self.audio_duration_ms = 0
             
@@ -752,13 +788,20 @@ class IntegratedLoopProfiler(QWidget):
             f"Start: {int(start_sec//60)}:{int(start_sec%60):02d}.{int((start_sec%1)*10)}  "
             f"End: {int(end_sec//60)}:{int(end_sec%60):02d}.{int((end_sec%1)*10)}  "
             f"Loop: {loop_len_sec:.1f}s  |  "
-            f"{c['s']:,} → {c['e']:,}"
+            f"{c['s']:,} → {c['e']:,}  ({c['e'] - c['s']:,})"
         )
         
         item = QListWidgetItem(item_text)
         item.setFont(QFont("Consolas", 9))
         item.setForeground(color)
         return item
+
+    def on_row_changed(self, row):
+        """リストで候補をシングルクリック選択したときにOGGボタンを有効化"""
+        if row < 0 or not self.candidates:
+            return
+        if self.audio_path and self.audio_path.lower().endswith(".ogg") and MUTAGEN_AVAILABLE:
+            self.btn_export_ogg.setEnabled(True)
 
     def on_candidate_selected(self, item):
         row = self.list.currentRow()
@@ -778,6 +821,9 @@ class IntegratedLoopProfiler(QWidget):
         self.current_loop_bytes = (s_bytes, e_bytes)
         self.status_label.setText(f"LOOP PREVIEW: {c['sc']:.1f}% ACCURACY")
         self.btn_export.setEnabled(True)
+        # OGGエクスポートは入力がOGGかつmutagenが利用可能なときのみ有効
+        if self.audio_path and self.audio_path.lower().endswith(".ogg") and MUTAGEN_AVAILABLE:
+            self.btn_export_ogg.setEnabled(True)
         self.update_preview_info()
 
     # ============================================================
@@ -953,6 +999,72 @@ Model Performance:
         
         finally:
             self.btn_export.setEnabled(True)
+
+    def export_ogg_with_tags(self):
+        """元のOGGファイルにLOOPSTART/LOOPLENGTHタグを付与してエクスポート"""
+        if not self.audio_path or not self.candidates:
+            return
+        if not self.audio_path.lower().endswith(".ogg"):
+            QMessageBox.warning(self, "Error", "OGGエクスポートはOGGファイルの入力時のみ使用できます")
+            return
+        if not MUTAGEN_AVAILABLE:
+            QMessageBox.warning(self, "Error",
+                "mutagen がインストールされていません。\n"
+                "インストール: pip install mutagen")
+            return
+
+        row = self.list.currentRow()
+        if row < 0:
+            QMessageBox.warning(self, "Error", "ループポイントを選択してください")
+            return
+
+        c = self.candidates[row]
+        loop_start = c["s"]
+        loop_length = c["e"] - c["s"]
+
+        # 保存先の選択
+        default_name = os.path.splitext(os.path.basename(self.audio_path))[0] + "_looped.ogg"
+        save_path, _ = QFileDialog.getSaveFileName(
+            self, "Save OGG with Loop Tags",
+            default_name,
+            "OGG (*.ogg)"
+        )
+        if not save_path:
+            return
+
+        self.status_label.setText("EXPORTING OGG...")
+        self.btn_export_ogg.setEnabled(False)
+
+        try:
+            # 元ファイルをコピー（再エンコードなし）
+            shutil.copy2(self.audio_path, save_path)
+
+            # mutagenでVorbisコメントにLOOPSTART/LOOPLENGTHを書き込み
+            ogg = OggVorbis(save_path)
+            if ogg.tags is None:
+                ogg.add_tags()
+            ogg.tags["LOOPSTART"] = [str(loop_start)]
+            ogg.tags["LOOPLENGTH"] = [str(loop_length)]
+            ogg.save()
+
+            self.status_label.setText("OGG EXPORTED")
+            QMessageBox.information(
+                self, "Success",
+                f"OGGファイルをエクスポートしました:\n{save_path}\n\n"
+                f"LOOPSTART  = {loop_start:,}\n"
+                f"LOOPLENGTH = {loop_length:,}"
+            )
+
+            # 成功時にAIフィードバックを記録
+            if AI_AVAILABLE and self._ensure_ai_initialized():
+                self._record_feedback(rating=1, source="export")
+
+        except Exception as e:
+            QMessageBox.critical(self, "Export Error", str(e))
+            self.status_label.setText("EXPORT FAILED")
+        finally:
+            if self.audio_path and self.audio_path.lower().endswith(".ogg") and MUTAGEN_AVAILABLE:
+                self.btn_export_ogg.setEnabled(True)
 
     def update_ui(self):
         if self.handle:
