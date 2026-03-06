@@ -752,7 +752,7 @@ class IntegratedLoopProfiler(QWidget):
             f"Start: {int(start_sec//60)}:{int(start_sec%60):02d}.{int((start_sec%1)*10)}  "
             f"End: {int(end_sec//60)}:{int(end_sec%60):02d}.{int((end_sec%1)*10)}  "
             f"Loop: {loop_len_sec:.1f}s  |  "
-            f"{c['s']:,} → {c['e']:,}"
+            f"{c['s']:,} → {c['e']:,}  ({c['e'] - c['s']:,})"
         )
         
         item = QListWidgetItem(item_text)
