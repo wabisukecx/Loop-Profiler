@@ -230,17 +230,3 @@ pip install librosa scikit-learn
 - エクスポート機能（イントロ・ループ・アウトロの組み合わせ）
 - キャッシュ機能
 
-## 🤝 コントリビューション
-
-バグ報告や機能要望はIssueでお願いします。
-
-## 📞 サポート
-
-問題が発生した場合は、以下の情報を含めてIssueを作成してください：
-- エラーメッセージ
-- 操作手順
-- Python/ライブラリのバージョン
-```bash
-python --version
-pip list | grep -E "PyQt6|pydub|librosa|sklearn"
-```
